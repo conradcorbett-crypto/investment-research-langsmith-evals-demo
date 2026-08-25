@@ -1,0 +1,79 @@
+tests/test_demo.py
+  s_d0a1cd337c35bf::t_4a44dd6ac60133 1-6,8-68,146-163,165-169,171-173,187-286,289-293,295-312
+  s_d0a1cd337c35bf::t_b12cf16c274edc 287-288,294
+  s_42446818ffee6b::t_2eca41fde27743 69-145
+  s_42446818ffee6b::t_e0b6afdf886598 164,170,174-186
+  s_42446818ffee6b::t_1e425db8ba5cc2 7
+.gitignore
+  s_d0a1cd337c35bf::t_241920fee964e4 1-40
+  s_d0a1cd337c35bf::t_7f5492f6e8b86a 41-42
+pyproject.toml
+  s_d0a1cd337c35bf::t_d0b03988261fe7 1-14,17
+  s_d0a1cd337c35bf::t_dfcd18c2d83e0c 15-16,18-22
+evaluators/__init__.py
+  s_d0a1cd337c35bf::t_a4d82277e87606 1-15
+example.env
+  s_d0a1cd337c35bf::t_768e865a1a8674 1-3
+judge_prompts/escalation_accuracy_aligned.md
+  s_d0a1cd337c35bf::t_f1120ee87cb5d2 1-30
+evaluators/research_policy.py
+  s_d0a1cd337c35bf::t_f1273b2ff17191 1-160
+README.md
+  s_42446818ffee6b::t_4d1c083a2f97fb 47,49-72
+  s_42446818ffee6b::t_3a84a851f0959d 119-125
+  s_42446818ffee6b::t_eac368f6fed9cb 146-148,150-156,158-159,161-189,192-195
+  s_42446818ffee6b::t_9e7ec82be391ca 73-74
+  s_d0a1cd337c35bf::t_07de5b0bbc22af 268,271-273
+  h_e0649daf4c2899 15,17,22,29,31,46,75,77,79,104,106,134,136,149,160,198,200,204-205,209,212-213,215,247-248,251,257,259,266,270,274,286,288,290,293,300-302,308
+  s_d0a1cd337c35bf::t_0323bab55931ad 130
+  s_d0a1cd337c35bf::t_17c28c4bb2ea5b 1-14,16,18-21,23-28,30,32-45,48,76,78,80-103,105,107-118,126-129,131-133,135,137-145,157,190-191,196-197,199,201-203,206-208,210-211,214,216-246,249-250,252-256,258,260-265,267,269,275-285,287,289,291-292,294-299,303-307
+dataset/research_quality.jsonl
+  s_42446818ffee6b::t_684bb760eb66c9 1-20
+docs/align_evaluator_walkthrough.md
+  s_d0a1cd337c35bf::t_876060881f3961 1-33,36-52,60-108
+  s_42446818ffee6b::t_6d1c8f1864c498 34-35
+  s_42446818ffee6b::t_5592b08834ad6d 53-59
+judge_prompts/escalation_accuracy.md
+  s_d0a1cd337c35bf::t_82ff25bdaf2573 1-33
+dataset/escalation_accuracy.jsonl
+  s_42446818ffee6b::t_684bb760eb66c9 1-20
+upload_experiment.py
+  s_d0a1cd337c35bf::t_b62146aa5a4ba2 1-11,13-28,34-88,95,98-104,110-111,114,116-117,119-120,124,128-134,137-186,188-200
+  s_42446818ffee6b::t_705dfd936a17e9 29-33
+  s_42446818ffee6b::t_042494a71073fe 89-94,96-97
+  s_42446818ffee6b::t_ee0f05648409a6 105-109,112,118,121-123
+  s_42446818ffee6b::t_4782f1ce560ca3 187
+  s_42446818ffee6b::t_ab044667af30f1 113,115,125-127,135-136
+  s_42446818ffee6b::t_542be42778f3c8 12
+uv.lock
+  s_d0a1cd337c35bf::t_8aeff2e27f5231 1-305
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "9b37853fdfba87cd2c154b1d39baa9df7f1959d4",
+  "prompts": {},
+  "humans": {
+    "h_e0649daf4c2899": {
+      "author": "Conrad Corbett <conrad.corbett@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_42446818ffee6b": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e45e6673-9a5f-421b-a3ad-bdf5b8c767a6",
+        "model": "auto-smart"
+      },
+      "human_author": "Conrad Corbett <conrad.corbett@langchain.dev>"
+    },
+    "s_d0a1cd337c35bf": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d69d2d99-02b7-41fb-bfd5-886b0ab02b0b",
+        "model": "default"
+      },
+      "human_author": "Conrad Corbett <conrad.corbett@langchain.dev>"
+    }
+  }
+}
