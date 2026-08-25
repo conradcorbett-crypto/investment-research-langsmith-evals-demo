@@ -1,0 +1,42 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+example.env.local
+
+# Credentials and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+credentials.json
+token.json
+*_rsa
+*_ed25519
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+.env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Packaging artifacts
+*.egg-info/

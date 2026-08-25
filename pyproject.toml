@@ -1,0 +1,22 @@
+[project]
+name = "investment-research-langsmith-evals-demo"
+version = "0.1.0"
+description = "Anonymized LangSmith evaluation demo for an investment research assistant"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+upload-experiment = "upload_experiment:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["upload_experiment"]
+
+[tool.setuptools.packages.find]
+include = ["evaluators*"]
