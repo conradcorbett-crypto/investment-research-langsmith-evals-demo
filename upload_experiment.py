@@ -170,6 +170,7 @@ def upload_experiment(
     data = resp.json()
     print(f"  Dataset: {data['dataset']['name']} ({data['dataset']['id']})")
     print(f"  Experiment: {data['experiment']['name']} ({data['experiment']['id']})")
+    print("  Open Datasets & Experiments in https://smith.langchain.com")
     return data
 
 

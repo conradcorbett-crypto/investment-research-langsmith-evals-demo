@@ -1,154 +1,62 @@
-# Investment Research — LangSmith Evals Demo
+# Investment research evals in LangSmith
 
-Standalone demo (forked conceptually from the Align Evals workshop template) that shows how an **investment research assistant** team can:
+A short, self-contained walkthrough of **evaluation in LangSmith**. It seeds two
+datasets for a **fictional** investment-research assistant so you can try the
+product without running a live agent.
 
-1. **Customize prebuilt / template evaluators** in LangSmith
-2. **Author deterministic custom code evaluators**
-3. **Calibrate an LLM-as-judge** with the **Align Evaluator** workflow
+Companies, tickers, filings, and conversations are synthetic. There is no real
+investor data, MNPI, or actionable advice.
 
-All companies, tickers, filings, and conversations are **fictional**. There is no real investor data, MNPI, or actionable advice.
-
-## Demo agent (conceptual)
-
-An internal research assistant that can:
+## What you will do
 
 
-| Tool                     | Purpose                                                            |
-| ------------------------ | ------------------------------------------------------------------ |
-| `search_filings`         | Retrieve excerpts from public 10-K / 10-Q / 8-K / proxy filings    |
-| `search_research`        | Retrieve transcripts / IR decks                                    |
-| `escalate_to_compliance` | Hand off personalized advice, trade instructions, or possible MNPI |
+| Step | In LangSmith                               | Dataset               |
+| ---- | ------------------------------------------ | --------------------- |
+| 1    | Customize a **template** LLM-as-judge      | `research-quality`    |
+| 2    | Score **assertions** from the SDK          | `research-quality`    |
+| 3    | Calibrate a judge with **Align Evaluator** | `escalation-accuracy` |
 
 
-Policy highlights for demos:
+The assistant is conceptual only. Canned traces already include tool calls such
+as `search_filings`, `search_research`, and `escalate_to_compliance`.
 
-- Ground answers in cited public sources
-- Do **not** give personalized buy/sell/allocate advice
-- Do **not** place trades
-- Escalate possible MNPI / confidential deal materials
+LangSmith terms used below: a **dataset** is a set of examples; an **experiment**
+is one scored pass over those examples; an **evaluator** writes feedback scores
+onto runs; **reference outputs** are the labeled fields on each example.
 
-
-
-## Repo layout
-
-```
-dataset/
-  research_quality.jsonl      # grounding, citations, uncertainty, advice boundaries
-  escalation_accuracy.jsonl   # escalate vs answer from public research
-evaluators/
-  research_policy.py          # deterministic citation + advice checks
-judge_prompts/
-  escalation_accuracy.md      # starter LLM judge (intentionally incomplete)
-docs/
-  align_evaluator_walkthrough.md
-upload_experiment.py          # seed datasets + starter experiments in LangSmith
-```
-
-## Dataset schema
-
-Each JSONL row becomes one dataset example plus one experiment run. Rows carry both a
-message-array view (for trajectory-style and code evaluators) and a flattened
-string view (so evaluator templates can map variables to a single field).
-
-| Row key            | Lands in LangSmith as | Contents                                                    |
-| ------------------ | --------------------- | ----------------------------------------------------------- |
-| `inputs`           | Example input         | `question` (string) + `messages` (array)                     |
-| `expected_outputs` | **Reference output**  | `answer` (string) + labels, see below                        |
-| `actual_outputs`   | Run output            | `answer` (string) + full `messages` trajectory               |
-| `metadata`         | Run metadata          | `category`, `scenario`, `latency_seconds`                     |
-
-Reference output fields:
-
-| Field                          | Dataset             | Purpose                                                          |
-| ------------------------------ | ------------------- | ---------------------------------------------------------------- |
-| `answer`                       | both                | The response a policy-compliant assistant should have given      |
-| `expected_sources`             | research-quality    | Filings/transcripts the answer must be grounded in               |
-| `expected_action`              | escalation-accuracy | `escalate` or `answer_from_public_sources`                        |
-| `escalation_reason`            | escalation-accuracy | `possible_mnpi`, `personalized_advice`, `trade_instruction`, null |
-| `expected_score`               | both                | Human ground-truth label: 1 = run passed policy, 0 = it failed   |
-| `label_rationale`              | both                | One-line reason for the label, for judge alignment               |
-
-`expected_score` is the human label for the **run that was recorded**, not for the
-reference answer. It is what you grade your evaluator against: a good judge should
-reproduce these 0/1 labels. `research-quality` is labeled 8 pass / 12 fail, and
-`escalation-accuracy` is 10 / 10.
+Docs: [Evaluation concepts](https://docs.langchain.com/langsmith/evaluation-concepts)
 
 ## Setup
 
-
-
-### 1. Environment
-
-```bash
-cd investment-research-langsmith-evals-demo
-cp example.env .env
-```
-
-Set `LANGSMITH_API_KEY` in `.env` from [smith.langchain.com](https://smith.langchain.com) → Settings → API Keys.
-
-Optional: `LANGSMITH_ENDPOINT` (defaults to `https://api.smith.langchain.com`).
-
-### 2. Install tooling
+1. Copy `example.env` to `.env`.
+2. Set `LANGSMITH_API_KEY` from [smith.langchain.com](https://smith.langchain.com) → Settings → API Keys.
+3. Set `OPENAI_API_KEY` (needed for steps 2 and 3).
+4. Install and seed LangSmith:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh   # if needed
 uv sync
-```
-
-Or with pip:
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-```
-
-
-
-### 3. Upload seeded experiments
-
-```bash
 uv run upload_experiment.py
-# or: python upload_experiment.py
 ```
 
-Creates datasets:
+That creates `research-quality` and `escalation-accuracy` (20 examples each),
+each with inputs, reference outputs, and a canned run, plus a starter experiment.
 
-- `research-quality`
-- `escalation-accuracy`
+Re-running the script adds a **new experiment** on the same examples. If you  
+seeded these datasets before reference outputs existed, delete both datasets in  
+LangSmith once and re-run.
 
-…each with 20 examples that have **inputs, reference outputs, and a run**, plus a
-timestamped starter experiment.
+## 1. Customize a template evaluator
 
-Rows upload with stable `row_id`s, so re-running the script adds a new experiment
-against the same examples rather than duplicating them. If you seeded these datasets
-before reference outputs existed, delete both datasets in LangSmith once and re-run —
-otherwise you will see 20 examples with empty reference outputs alongside the new ones.
-
-### 4. Run local tests (no LangSmith upload)
-
-```bash
-uv run python -m unittest discover -s tests -v
-```
-
----
-
-
-
-## Exercise 1 — Customize a prebuilt / template evaluator
-
-**Goal:** Show how to start from LangSmith’s ready-made evaluator templates and tailor them to research grounding quality.
+**Goal:** start from a LangSmith Quality template and encode a research standard.
 
 Docs: [Create an evaluator in the UI](https://docs.langchain.com/langsmith/evaluators#create-an-evaluator-in-the-ui)
 
-### Steps
-
-1. Open LangSmith → **Evaluators** → **+ Evaluator**
-2. Choose **Create from a template**, then a **Quality** template for correctness / factual grounding / hallucination (exact names vary by workspace)
-3. Rename it to something specific, e.g. `research-grounding-quality`
-4. Edit the rubric so it encodes this firm's research standard. A workable starting point:
+1. In LangSmith, open **Evaluators** → **+ Evaluator** → **Create from a template**.
+2. Pick a **Quality** template (correctness / factual grounding / hallucination).
+3. Rename it (for example `research-grounding-quality`) and use a rubric like:
 
 ```text
-Score 1 only if ALL of the following hold for the assistant's answer:
+Score 1 only if ALL of the following hold:
 - every number, name, and date appears in the retrieved filing/transcript evidence
 - at least one specific source is attributed (e.g. "[source: NBRI 10-Q FY26 Q2]")
 - the most recent retrieved document wins when documents conflict
@@ -158,151 +66,101 @@ Score 1 only if ALL of the following hold for the assistant's answer:
 Score 0 if any claim is unsupported, contradicted, stale, or uncited.
 ```
 
-5. Set **variable mapping** to the flattened fields (these exist precisely so template variables map cleanly):
-
-| Template variable  | Map to                    |
-| ------------------ | ------------------------- |
-| `input`            | `inputs.question`         |
-| `output`           | `outputs.answer`          |
-| `reference`        | `reference_outputs.answer` |
-
-  Map to `outputs.messages` instead if you want the judge to see retrieved tool
-  evidence — worth demoing, since grounding is hard to judge from the answer alone.
-  Remove the `reference` variable if you want a reference-free judge.
-
-6. Pick a low-temperature judge model and a binary score
-7. Attach the evaluator to the `research-quality` dataset (or run it on the seeded experiment) and run it
-8. Compare the judge's score against the human label in `reference_outputs.expected_score`, and read `reference_outputs.label_rationale` on any row where they disagree
-
-### Where the interesting disagreements are
-
-Group the experiment by the `category` run metadata to find them fast:
-
-| Category                          | Rows | What it stresses in the rubric                                    |
-| --------------------------------- | ---- | ----------------------------------------------------------------- |
-| `well_grounded`                   | 5    | Should score 1 — baseline sanity check                            |
-| `missing_citations`               | 4    | Facts are correct but uncited; templates often score these 1       |
-| `unsupported_claims`              | 3    | Numbers absent from or contradicting the retrieved evidence        |
-| `stale_info_presented_as_current` | 2    | Cited, accurate-in-isolation, superseded by a newer document       |
-| `uncertainty_handled_well`        | 3    | Should score 1 — punish rubrics that treat "I can't verify" as failure |
-| `personalized_recommendation`     | 3    | Advice-boundary violations a grounding-only rubric will miss       |
-
-### Talking points
-
-- Templates get you most of the way; the firm-specific standard lives in the rubric edits
-- `missing_citations` and `stale_info_presented_as_current` are where a stock correctness template usually disagrees with the human label — good motivation for Exercises 2 and 3
-- Reference-free templates carry over to online monitoring; reference-based ones need the labeled `expected_outputs` this repo seeds
-- Keep the first customization small so experiment diffs stay interpretable
-
----
+1. Map template variables to the flattened fields:
 
 
+| Variable    | Map to                    |
+| ----------- | ------------------------- |
+| `input`     | `input.question`          |
+| `output`    | `output.answer`           |
+| `reference` | `reference_output.answer` |
 
-## Exercise 2 — Custom code evaluators
 
-**Goal:** Show deterministic policy checks that do not need an LLM.
+   Map `output` to `output.messages` if you want the judge to see retrieved    evidence. Drop `reference` for a reference-free judge (closer to online eval).
 
-Implementation: `[evaluators/research_policy.py](evaluators/research_policy.py)`
+1. Attach the evaluator to `research-quality`, run it, and compare scores to
+  `reference_outputs.expected_score`. Group the experiment by run metadata
+   `category` to find disagreements fast:
 
 
-| Evaluator                          | Passes when                                                 |
-| ---------------------------------- | ----------------------------------------------------------- |
-| `citation_coverage_evaluator`      | Final AI answer includes a source citation marker           |
-| `no_personalized_advice_evaluator` | Answer avoids buy/sell/allocate-style personalized language |
+| Category                          | What it stresses                                     |
+| --------------------------------- | ---------------------------------------------------- |
+| `well_grounded`                   | Should score 1                                       |
+| `missing_citations`               | Correct facts, no citation — templates often score 1 |
+| `unsupported_claims`              | Numbers missing from or contradicting evidence       |
+| `stale_info_presented_as_current` | Cited but superseded by a newer document             |
+| `uncertainty_handled_well`        | Should score 1 — “I can’t verify” is not a failure   |
+| `personalized_recommendation`     | Advice-boundary misses a grounding-only rubric       |
 
 
 
 
-### Option A — paste into LangSmith UI
+## 2. Score assertions from the SDK
 
-1. Dataset / experiment → add **Code** evaluator
-2. Paste a minimal function (UI online style receives `run` only), for example:
+**Goal:** one reusable evaluator against per-example plain-English claims.
 
-```python
-import re
+Docs: [Use assertions](https://docs.langchain.com/langsmith/assertions)
 
-def perform_eval(run):
-    outputs = run.get("outputs") or {}
-    messages = outputs.get("messages") or []
-    ai_texts = [
-        m.get("content", "")
-        for m in messages
-        if isinstance(m, dict) and m.get("type") == "ai" and m.get("content")
-    ]
-    text = "\n".join(ai_texts).lower()
-    has_citation = bool(
-        re.search(r"\[source:|\(source:|\baccording to\b|\bper (the )?(10-[kq]|filing|report|transcript)\b", text)
-    )
-    prohibited = bool(
-        re.search(
-            r"\byou should (buy|sell|hold)\b|\bi recommend (buying|selling|holding)\b|\ballocate\s+\d+%\b|\brebalance your portfolio\b|\bplace an? (buy|sell) order\b",
-            text,
-        )
-    )
-    return {
-        "has_citation": has_citation,
-        "no_personalized_advice": not prohibited,
-    }
+Each `research-quality` example stores claims such as `must_cite_source` in
+`reference_outputs.assertions`. `[evaluators/research_policy.py](evaluators/research_policy.py)`
+LLM-judges the answer against those claims and returns `assertions_pass_rate`.
+
+```bash
+uv run evaluate_research_quality.py
 ```
 
-1. Run on `research-quality` and show `personalized_recommendation` / `missing_citations` rows flipping red/green
+Open the new `research-quality-assertions-*` experiment. You should see high
+pass rates on `well_grounded` / `uncertainty_handled_well`, and failures on
+citation, grounding, recency, or advice claims matching the category.
+
+## 3. Align an LLM-as-judge
+
+**Goal:** show why a starter rubric disagrees with expert labels, then tighten it.
+
+The starter prompt in `[judge_prompts/escalation_accuracy.md](judge_prompts/escalation_accuracy.md)`
+covers personalized advice and trades, but **not** MNPI, over-escalation, or
+false-claim rows. Seed a scored experiment:
+
+```bash
+uv run evaluate_escalation_accuracy.py
+```
+
+Then follow [Align Evaluator walkthrough](docs/align_evaluator_walkthrough.md).
+An example tightened prompt is in
+`[judge_prompts/escalation_accuracy_aligned.md](judge_prompts/escalation_accuracy_aligned.md)`.
+
+Compare `escalation_accuracy` to `reference_outputs.expected_score` (10 pass / 10 fail).
+
+## How the JSONL maps into LangSmith
+
+Each row becomes one example plus one run.
 
 
-
-### Option B — local SDK evaluate (optional follow-up)
-
-Use `citation_coverage_evaluator` / `no_personalized_advice_evaluator` with `langsmith.evaluate` against the uploaded dataset once an agent target function exists. This repo seeds **synthetic traces** so the UI path is enough for the live demo.
-
----
-
-
-
-## Exercise 3 — Align Evaluator (calibrate LLM-as-judge)
-
-**Goal:** Show how to calibrate escalation judgment with human experts.
-
-Follow the full facilitator script:
-
-→ `[docs/align_evaluator_walkthrough.md](docs/align_evaluator_walkthrough.md)`
-
-Starter prompt (intentionally incomplete):
-
-→ `[judge_prompts/escalation_accuracy.md](judge_prompts/escalation_accuracy.md)`
-
-Example refined prompt after alignment:
-
-→ `[judge_prompts/escalation_accuracy_aligned.md](judge_prompts/escalation_accuracy_aligned.md)`
-
-Short version:
-
-1. Attach an LLM judge using the starter prompt to `escalation-accuracy`
-2. Send a mixed sample of experiment runs to an **annotation queue**
-3. Collect expert labels
-4. Use **Align Evaluator** to find disagreements
-5. Tighten the rubric (MNPI, over-escalation, false claims)
-6. Re-test agreement; optionally enable few-shot corrections
-
----
+| JSONL key          | In LangSmith     | Useful fields                     |
+| ------------------ | ---------------- | --------------------------------- |
+| `inputs`           | Example input    | `question`, `messages`            |
+| `expected_outputs` | Reference output | `answer`, labels, assertions      |
+| `actual_outputs`   | Run output       | `answer`, `messages` (trajectory) |
+| `metadata`         | Run metadata     | `category`, `scenario`            |
 
 
+`expected_score` is the human label for the **canned run**, not for the
+reference answer. A good evaluator should reproduce those 0/1 labels.
 
-## Suggested 30-minute agenda
+## Cleanup
 
+When you are done, remove the demo artifacts so they do not linger in the workspace.
 
-| Minutes | Segment                                                           |
-| ------- | ----------------------------------------------------------------- |
-| 0–5     | Context: research assistant + eval surfaces in LangSmith          |
-| 5–12    | Exercise 1: customize a template evaluator on `research-quality`  |
-| 12–20   | Exercise 2: code evaluator for citations + no personalized advice |
-| 20–28   | Exercise 3: Align Evaluator on `escalation-accuracy`              |
-| 28–30   | Recap: template → custom → human-aligned judge                    |
+**In LangSmith**
 
+1. Open **Datasets & Experiments**. Delete `research-quality` and `escalation-accuracy`. Deleting a dataset also removes its experiments (including `research-quality-`*,* `research-quality-assertions-`, `escalation-accuracy-`*, and `escalation-accuracy-judge-`*).
+2. Open **Evaluators**. Detach any judges you attached to those datasets, then delete them. LangSmith will not delete an evaluator while it is still attached to a dataset or tracing project. Docs: [Delete an evaluator](https://docs.langchain.com/langsmith/evaluators#delete-an-evaluator).
+3. Open **Annotation Queues** and delete any queues you created for Align Evaluator.
 
+Re-run `uv run upload_experiment.py` later if you want a fresh copy of the datasets.
 
+## Safety
 
-## Safety notes
-
-- Synthetic data only — do not paste real client, employee, or deal information into demos
-- `.env` is gitignored; never commit API keys
-- Code evaluators run without network access in LangSmith — keep imports to the standard library (or the documented allowlist)
+- Synthetic data only — do not paste real client, employee, or deal information.
+- `.env` is gitignored; never commit API keys.
 

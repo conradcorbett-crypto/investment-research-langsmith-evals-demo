@@ -1,4 +1,4 @@
-"""Tests for dataset schema, upload shaping, and policy evaluators."""
+"""Tests for dataset schema, upload shaping, and assertion evaluators."""
 
 from __future__ import annotations
 
@@ -8,15 +8,16 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from evaluators.research_policy import (  # noqa: E402
-    citation_coverage_evaluator,
-    no_personalized_advice_evaluator,
-    perform_eval,
+    assertion_evaluator,
+    has_citation,
+    has_prohibited_recommendation,
 )
 from upload_experiment import EXERCISES, load_rows, make_results  # noqa: E402
 
@@ -73,6 +74,7 @@ class DatasetSchemaTests(unittest.TestCase):
                 "expected_sources",
                 "expected_score",
                 "label_rationale",
+                "assertions",
             },
             "escalation-accuracy": {
                 "answer",
@@ -94,6 +96,18 @@ class DatasetSchemaTests(unittest.TestCase):
                 )
                 self.assertTrue(expected["answer"].strip())
                 self.assertIn(expected["expected_score"], (0, 1))
+
+    def test_research_quality_assertions_shape(self):
+        path = ROOT / "dataset" / "research_quality.jsonl"
+        for row in load_rows(path):
+            assertions = row["expected_outputs"]["assertions"]
+            self.assertIsInstance(assertions, list)
+            self.assertGreaterEqual(len(assertions), 1)
+            for assertion in assertions:
+                self.assertIn("key", assertion)
+                self.assertIn("comment", assertion)
+                self.assertTrue(str(assertion["key"]).strip())
+                self.assertTrue(str(assertion["comment"]).strip())
 
     def test_human_label_matches_category(self):
         passing_categories = {
@@ -159,7 +173,7 @@ class UploadShapingTests(unittest.TestCase):
         path = Path(EXERCISES[0]["jsonl_file"])
         rows = load_rows(path)
         base = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        results = make_results(rows, base)
+        results = make_results(rows, base, EXERCISES[0]["dataset_name"])
         self.assertEqual(len(results), len(rows))
         for row, result in zip(rows, results):
             self.assertIn("inputs", result)
@@ -168,6 +182,7 @@ class UploadShapingTests(unittest.TestCase):
             self.assertIn("end_time", result)
             self.assertNotIn("metadata", result)
             self.assertEqual(result["expected_outputs"], row["expected_outputs"])
+            self.assertIn("assertions", result["expected_outputs"])
             self.assertEqual(
                 result["run_metadata"]["agent"], "investment-research-assistant"
             )
@@ -186,100 +201,164 @@ class UploadShapingTests(unittest.TestCase):
             load_rows(bad)
 
 
-class EvaluatorTests(unittest.TestCase):
-    def test_citation_pass_and_fail(self):
-        good = {
+class AssertionEvaluatorTests(unittest.TestCase):
+    def test_all_yes_scores_one(self):
+        run = {"outputs": {"answer": "Revenue +8%. [source: NBRI 10-Q]"}}
+        example = {
+            "inputs": {"question": "Summarize revenue."},
             "outputs": {
-                "messages": [
-                    {
-                        "type": "ai",
-                        "content": "Revenue grew 8%. [source: NBRI 10-Q FY26 Q2]",
-                    }
+                "assertions": [
+                    {"key": "must_cite_source", "comment": "Must cite."},
+                    {"key": "must_only_use_retrieved_evidence", "comment": "Grounded."},
                 ]
-            }
+            },
         }
-        bad = {
-            "outputs": {
-                "messages": [
-                    {"type": "ai", "content": "Revenue grew 8% last quarter."}
-                ]
-            }
-        }
-        self.assertEqual(citation_coverage_evaluator(good)["score"], 1)
-        self.assertEqual(citation_coverage_evaluator(bad)["score"], 0)
+        with patch(
+            "evaluators.research_policy._judge", return_value=1.0
+        ) as mock_judge:
+            result = assertion_evaluator(run, example)
+        self.assertEqual(result["key"], "assertions_pass_rate")
+        self.assertEqual(result["score"], 1.0)
+        self.assertEqual(mock_judge.call_count, 2)
+        self.assertIn("2/2", result["comment"])
 
-    def test_personalized_advice_detected(self):
-        bad = {
+    def test_mixed_scores_fraction(self):
+        run = {"outputs": {"answer": "You should buy NBRI."}}
+        example = {
+            "inputs": {"question": "Should I buy?"},
             "outputs": {
-                "messages": [
-                    {
-                        "type": "ai",
-                        "content": "You should buy Apex and allocate 15% of your portfolio.",
-                    }
+                "assertions": [
+                    {"key": "a", "comment": "one"},
+                    {"key": "b", "comment": "two"},
+                    {"key": "c", "comment": "three"},
                 ]
-            }
+            },
         }
-        good = {
-            "outputs": {
-                "messages": [
-                    {
-                        "type": "ai",
-                        "content": "Per the APXS 10-K, gross margin was 48%.",
-                    }
-                ]
-            }
-        }
-        self.assertEqual(no_personalized_advice_evaluator(bad)["score"], 0)
-        self.assertEqual(no_personalized_advice_evaluator(good)["score"], 1)
+        with patch(
+            "evaluators.research_policy._judge", side_effect=[1.0, 0.0, 1.0]
+        ):
+            result = assertion_evaluator(run, example)
+        self.assertAlmostEqual(result["score"], 2 / 3)
+        self.assertIn("2/3", result["comment"])
 
-    def test_perform_eval_ui_shape(self):
+    def test_empty_assertions_score_one(self):
+        run = {"outputs": {"answer": "anything"}}
+        example = {"inputs": {"question": "q"}, "outputs": {"assertions": []}}
+        result = assertion_evaluator(run, example)
+        self.assertEqual(result["score"], 1.0)
+        self.assertIn("no assertions", result["comment"])
+
+    def test_missing_answer_scores_zero(self):
+        run = {"outputs": {"answer": ""}}
+        example = {
+            "inputs": {"question": "q"},
+            "outputs": {
+                "assertions": [{"key": "must_cite_source", "comment": "cite"}]
+            },
+        }
+        result = assertion_evaluator(run, example)
+        self.assertEqual(result["score"], 0.0)
+        self.assertIn("no answer", result["comment"])
+
+    def test_reads_expected_outputs_alias(self):
+        run = {"outputs": {"answer": "ok [source: filing]"}}
+        example = {
+            "inputs": {"question": "q"},
+            "expected_outputs": {
+                "assertions": [{"key": "must_cite_source", "comment": "cite"}]
+            },
+        }
+        with patch("evaluators.research_policy._judge", return_value=1.0):
+            result = assertion_evaluator(run, example)
+        self.assertEqual(result["score"], 1.0)
+
+    def test_helpers_still_detect_citation_and_advice(self):
+        self.assertTrue(has_citation("Per the 10-K, margin was 48%."))
+        self.assertFalse(has_citation("Margin was 48%."))
+        self.assertTrue(
+            has_prohibited_recommendation("You should buy Apex and allocate 15%.")
+        )
+        self.assertFalse(
+            has_prohibited_recommendation("Per the APXS 10-K, gross margin was 48%.")
+        )
+
+
+class EvalCommonTests(unittest.TestCase):
+    def test_question_from_inputs_prefers_question_field(self):
+        from eval_common import question_from_inputs
+
+        self.assertEqual(
+            question_from_inputs({"question": "What is revenue?"}),
+            "What is revenue?",
+        )
+
+    def test_build_replay_index_rejects_duplicates(self):
+        from eval_common import build_replay_index
+
+        rows = [
+            {
+                "inputs": {"question": "q"},
+                "actual_outputs": {"answer": "a"},
+            },
+            {
+                "inputs": {"question": "q"},
+                "actual_outputs": {"answer": "b"},
+            },
+        ]
+        with self.assertRaises(SystemExit):
+            build_replay_index(rows, dataset_file="dup.jsonl")
+
+    def test_escalation_eval_script_wires_the_judge(self):
+        src = (ROOT / "evaluate_escalation_accuracy.py").read_text(encoding="utf-8")
+        self.assertIn("evaluators=[escalation_accuracy_evaluator]", src)
+
+
+class EscalationEvaluatorTests(unittest.TestCase):
+    def test_parses_json_score(self):
+        from evaluators.escalation_accuracy import escalation_accuracy_evaluator
+
         run = {
             "outputs": {
+                "answer": "Escalated to compliance.",
                 "messages": [
+                    {"type": "human", "content": "Buy this for me"},
                     {
                         "type": "ai",
-                        "content": "According to the filing, capacity was 4.2 GW.",
-                    }
-                ]
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "name": "escalate_to_compliance",
+                                "args": {"reason": "trade_instruction"},
+                            }
+                        ],
+                    },
+                    {"type": "ai", "content": "Escalated to compliance."},
+                ],
             }
         }
-        result = perform_eval(run)
-        self.assertTrue(result["has_citation"])
-        self.assertTrue(result["no_personalized_advice"])
+        example = {"inputs": {"question": "Buy this for me"}, "outputs": {}}
 
-    def test_dataset_personalized_rows_fail_advice_check(self):
-        path = ROOT / "dataset" / "research_quality.jsonl"
-        rows = load_rows(path)
-        flagged = [
-            r
-            for r in rows
-            if r["metadata"]["category"] == "personalized_recommendation"
-        ]
-        self.assertGreaterEqual(len(flagged), 1)
-        for r in flagged:
-            score = no_personalized_advice_evaluator(
-                {"outputs": r["actual_outputs"]}
-            )["score"]
-            self.assertEqual(
-                score,
-                0,
-                f"expected advice violation for scenario={r['metadata']['scenario']}",
-            )
+        class _Msg:
+            content = '{"score": 1, "reasoning": "correct escalate"}'
 
-    def test_well_grounded_rows_have_citations(self):
-        path = ROOT / "dataset" / "research_quality.jsonl"
-        rows = load_rows(path)
-        grounded = [r for r in rows if r["metadata"]["category"] == "well_grounded"]
-        self.assertGreaterEqual(len(grounded), 1)
-        for r in grounded:
-            score = citation_coverage_evaluator({"outputs": r["actual_outputs"]})[
-                "score"
-            ]
-            self.assertEqual(
-                score,
-                1,
-                f"expected citation for scenario={r['metadata']['scenario']}",
-            )
+        class _Choice:
+            message = _Msg()
+
+        class _Resp:
+            choices = [_Choice()]
+
+        with patch("evaluators.escalation_accuracy._get_client") as mock_client:
+            mock_client.return_value.chat.completions.create.return_value = _Resp()
+            result = escalation_accuracy_evaluator(run, example)
+        self.assertEqual(result["key"], "escalation_accuracy")
+        self.assertEqual(result["score"], 1)
+        self.assertIn("correct escalate", result["comment"])
+
+    def test_missing_outputs_score_zero(self):
+        from evaluators.escalation_accuracy import escalation_accuracy_evaluator
+
+        result = escalation_accuracy_evaluator({"outputs": {}}, {"inputs": {}})
+        self.assertEqual(result["score"], 0)
 
 
 class NoCustomerBrandingTests(unittest.TestCase):

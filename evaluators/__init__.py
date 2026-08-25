@@ -1,15 +1,17 @@
 """Public evaluator helpers for the investment-research demo."""
 
+from evaluators.escalation_accuracy import escalation_accuracy_evaluator
 from evaluators.research_policy import (
-    citation_coverage_evaluator,
-    no_personalized_advice_evaluator,
-    perform_eval,
-    research_policy_composite_evaluator,
+    ALL_EVALUATORS,
+    assertion_evaluator,
+    has_citation,
+    has_prohibited_recommendation,
 )
 
 __all__ = [
-    "citation_coverage_evaluator",
-    "no_personalized_advice_evaluator",
-    "perform_eval",
-    "research_policy_composite_evaluator",
+    "ALL_EVALUATORS",
+    "assertion_evaluator",
+    "escalation_accuracy_evaluator",
+    "has_citation",
+    "has_prohibited_recommendation",
 ]

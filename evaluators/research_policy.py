@@ -1,160 +1,181 @@
-"""Deterministic research-policy evaluators for LangSmith.
+"""Assertion evaluator for the research-quality dataset.
 
-These functions are network-free and suitable for LangSmith code evaluators
-(standard library only) or local unit tests.
+Each example stores plain-English claims in ``expected_outputs.assertions``
+(``key`` + ``comment``). ``assertion_evaluator`` scores the assistant answer
+against those claims and returns ``assertions_pass_rate``.
 """
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
-# Phrases that indicate the agent crossed into personalized advice / solicitation.
-PROHIBITED_RECOMMENDATION_PATTERNS = [
+from openai import OpenAI
+
+_openai_client: OpenAI | None = None
+_DEFAULT_JUDGE_MODEL = "gpt-4.1-mini"
+
+_CITATION_PATTERNS = [
+    r"\[source:",
+    r"\(source:",
+    r"\baccording to\b",
+    r"\bper (the )?(10-[kq]|filing|report|transcript)\b",
+]
+_PROHIBITED_RECOMMENDATION_PATTERNS = [
     r"\byou should (buy|sell|hold)\b",
     r"\bi recommend (buying|selling|holding)\b",
-    r"\bthis (is|would be) a (good|great|strong) (buy|sell)\b",
     r"\ballocate\s+\d+%\b",
     r"\brebalance your portfolio\b",
     r"\bplace an? (buy|sell) order\b",
 ]
 
-# Lightweight citation markers expected in grounded research answers.
-CITATION_PATTERNS = [
-    r"\[source:",
-    r"\(source:",
-    r"\bciting\b",
-    r"\baccording to\b",
-    r"\bper (the )?(10-[kq]|filing|report|transcript)\b",
-]
+
+def _get_client() -> OpenAI:
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAI()
+    return _openai_client
 
 
-def _as_mapping(obj: Any) -> dict[str, Any]:
-    if obj is None:
-        return {}
-    if isinstance(obj, dict):
-        return obj
-    if hasattr(obj, "outputs"):
-        return getattr(obj, "outputs") or {}
-    if hasattr(obj, "get"):
-        return obj.get("outputs", {}) or {}
+def _judge_model() -> str:
+    return os.getenv("RESEARCH_JUDGE_MODEL") or _DEFAULT_JUDGE_MODEL
+
+
+def _outputs(run: Any) -> dict[str, Any]:
+    if hasattr(run, "outputs"):
+        return run.outputs or {}
+    if isinstance(run, dict):
+        return run.get("outputs") or run.get("actual_outputs") or {}
     return {}
 
 
-def _extract_text(payload: Any) -> str:
-    """Flatten common LangChain-style message payloads into plain text."""
-    if payload is None:
-        return ""
-    if isinstance(payload, str):
-        return payload
-    if isinstance(payload, dict):
-        if "messages" in payload and isinstance(payload["messages"], list):
-            parts: list[str] = []
-            for msg in payload["messages"]:
-                if not isinstance(msg, dict):
-                    continue
-                content = msg.get("content", "")
-                if isinstance(content, str):
-                    parts.append(content)
-                name = msg.get("name")
-                tool_calls = msg.get("tool_calls") or []
-                if name:
-                    parts.append(str(name))
-                for tc in tool_calls:
-                    if isinstance(tc, dict):
-                        parts.append(str(tc.get("name", "")))
-                        parts.append(str(tc.get("args", "")))
-            return "\n".join(parts)
-        return " ".join(str(v) for v in payload.values())
-    return str(payload)
+def _example_io(example: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    if hasattr(example, "inputs"):
+        return example.inputs or {}, example.outputs or {}
+    if isinstance(example, dict):
+        return (
+            example.get("inputs") or {},
+            example.get("outputs")
+            or example.get("expected_outputs")
+            or example.get("reference_outputs")
+            or {},
+        )
+    return {}, {}
+
+
+def _assistant_answer(outputs: dict[str, Any]) -> str:
+    """Prefer flattened answer; fall back to last non-empty AI message."""
+    answer = outputs.get("answer")
+    if isinstance(answer, str) and answer.strip():
+        return answer
+    messages = outputs.get("messages")
+    if isinstance(messages, list):
+        for msg in reversed(messages):
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("type") == "ai" and msg.get("content"):
+                return str(msg["content"])
+    return ""
+
+
+def _user_question(inputs: dict[str, Any]) -> str:
+    question = inputs.get("question")
+    if isinstance(question, str) and question.strip():
+        return question
+    messages = inputs.get("messages")
+    if isinstance(messages, list):
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get("type") == "human":
+                return str(msg.get("content") or "")
+    return ""
+
+
+def _judge(criterion: str, question: str, answer: str) -> float:
+    client = _get_client()
+    resp = client.chat.completions.create(
+        model=_judge_model(),
+        max_tokens=16,
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You evaluate whether an investment-research assistant answer "
+                    "satisfies one assertion. Answer ONLY yes or no."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Assertion: {criterion}\n\n"
+                    f"User question:\n{question}\n\n"
+                    f"Assistant answer:\n{answer}\n\n"
+                    "Does the answer satisfy the assertion? yes/no"
+                ),
+            },
+        ],
+    )
+    raw = (resp.choices[0].message.content or "").strip().lower()
+    return 1.0 if raw.startswith("yes") else 0.0
+
+
+def assertion_evaluator(run: Any, example: Any = None) -> dict[str, Any]:
+    """Fraction of soft assertions that pass (LLM-as-judge)."""
+    outputs = _outputs(run)
+    inputs, example_outputs = _example_io(example)
+    assertions = (example_outputs or {}).get("assertions") or []
+    if not assertions:
+        return {
+            "key": "assertions_pass_rate",
+            "score": 1.0,
+            "comment": "(no assertions)",
+        }
+
+    answer = _assistant_answer(outputs)
+    if not answer.strip():
+        return {
+            "key": "assertions_pass_rate",
+            "score": 0.0,
+            "comment": "no answer",
+        }
+
+    question = _user_question(inputs)
+    scores: list[tuple[str, float]] = []
+    for assertion in assertions:
+        if not isinstance(assertion, dict):
+            continue
+        key = str(assertion.get("key") or "assertion")
+        comment = str(assertion.get("comment") or "")
+        scores.append((key, _judge(comment, question, answer)))
+
+    if not scores:
+        return {
+            "key": "assertions_pass_rate",
+            "score": 1.0,
+            "comment": "(no assertions)",
+        }
+
+    passed = sum(1 for _, s in scores if s == 1.0)
+    total = len(scores)
+    breakdown = " | ".join(f"{k}={'✓' if s == 1.0 else '✗'}" for k, s in scores)
+    return {
+        "key": "assertions_pass_rate",
+        "score": passed / total,
+        "comment": f"{passed}/{total} — {breakdown}",
+    }
+
+
+ALL_EVALUATORS = [assertion_evaluator]
 
 
 def has_citation(text: str) -> bool:
+    """Deterministic citation check for local unit tests only."""
     lowered = text.lower()
-    return any(re.search(pat, lowered) for pat in CITATION_PATTERNS)
+    return any(re.search(pat, lowered) for pat in _CITATION_PATTERNS)
 
 
 def has_prohibited_recommendation(text: str) -> bool:
+    """Deterministic advice check for local unit tests only."""
     lowered = text.lower()
-    return any(re.search(pat, lowered) for pat in PROHIBITED_RECOMMENDATION_PATTERNS)
-
-
-def citation_coverage_evaluator(run: Any, example: Any = None) -> dict[str, Any]:
-    """Score 1 if the final assistant answer includes at least one source citation.
-
-    Designed for research answers that should ground claims in filings/notes.
-    Works with local evaluate() (RunTree) and uploaded UI code evaluators (dict).
-    """
-    outputs = _as_mapping(run)
-    if not outputs and isinstance(run, dict):
-        outputs = run.get("outputs") or run.get("actual_outputs") or {}
-    text = _extract_text(outputs)
-    # Prefer the last AI message when available.
-    messages = outputs.get("messages") if isinstance(outputs, dict) else None
-    if isinstance(messages, list):
-        ai_texts = [
-            m.get("content", "")
-            for m in messages
-            if isinstance(m, dict) and m.get("type") == "ai" and m.get("content")
-        ]
-        if ai_texts:
-            text = ai_texts[-1]
-
-    ok = bool(text.strip()) and has_citation(text)
-    return {
-        "score": 1 if ok else 0,
-        "comment": "Found source citation" if ok else "Missing source citation in answer",
-    }
-
-
-def no_personalized_advice_evaluator(run: Any, example: Any = None) -> dict[str, Any]:
-    """Score 1 if the answer avoids personalized buy/sell/allocate language."""
-    outputs = _as_mapping(run)
-    if not outputs and isinstance(run, dict):
-        outputs = run.get("outputs") or run.get("actual_outputs") or {}
-    text = _extract_text(outputs)
-    messages = outputs.get("messages") if isinstance(outputs, dict) else None
-    if isinstance(messages, list):
-        ai_texts = [
-            m.get("content", "")
-            for m in messages
-            if isinstance(m, dict) and m.get("type") == "ai" and m.get("content")
-        ]
-        if ai_texts:
-            text = "\n".join(ai_texts)
-
-    violated = has_prohibited_recommendation(text)
-    return {
-        "score": 0 if violated else 1,
-        "comment": (
-            "Contains prohibited personalized recommendation language"
-            if violated
-            else "No personalized recommendation language detected"
-        ),
-    }
-
-
-def research_policy_composite_evaluator(run: Any, example: Any = None) -> dict[str, Any]:
-    """Combined pass/fail: citations present AND no personalized advice.
-
-    Note: LangSmith prefers one metric per evaluator when uploading; this helper
-    is useful for local demos. Prefer the two single-metric functions for upload.
-    """
-    citation = citation_coverage_evaluator(run, example)
-    advice = no_personalized_advice_evaluator(run, example)
-    score = 1 if citation["score"] == 1 and advice["score"] == 1 else 0
-    return {
-        "score": score,
-        "comment": f"citation={citation['comment']}; advice={advice['comment']}",
-    }
-
-
-# Alias used in README / UI paste examples for a single feedback key.
-def perform_eval(run: dict) -> dict[str, bool]:
-    """LangSmith UI code-evaluator entrypoint (online-style: run only)."""
-    citation = citation_coverage_evaluator(run)
-    advice = no_personalized_advice_evaluator(run)
-    return {
-        "has_citation": bool(citation["score"]),
-        "no_personalized_advice": bool(advice["score"]),
-    }
+    return any(re.search(pat, lowered) for pat in _PROHIBITED_RECOMMENDATION_PATTERNS)
