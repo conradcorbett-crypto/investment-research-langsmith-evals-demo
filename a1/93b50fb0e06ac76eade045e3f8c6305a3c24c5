@@ -1,0 +1,78 @@
+example.env
+  s_1f00cdba32ca37::t_ca85ce44f1eafd 1-5,7-8,11,13-14
+  s_42446818ffee6b::t_bb77e64ea30e39 10,12,15
+evaluators/research_policy.py
+  s_42446818ffee6b::t_c85559cbffc28b 10,14-17,34-38,41-42,45-50,53-72,74-86,88-161,163-165,169,172,174-175,177-178,180-181
+  s_1f00cdba32ca37::t_e7a9558aef7f36 1,3-5
+  s_42446818ffee6b::t_8d9e1fff645162 19,25-31,173,179
+eval_common.py
+  s_1f00cdba32ca37::t_5f87ac4e50369e 1-51
+upload_experiment.py
+  s_1f00cdba32ca37::t_e90bec77ce434c 173
+dataset/research_quality.jsonl
+  s_42446818ffee6b::t_42c0e045c8a794 1-20
+evaluators/escalation_accuracy.py
+  s_42446818ffee6b::t_b88f1440cade6a 2-115
+  s_1f00cdba32ca37::t_deb27d6f92b8fe 1
+evaluators/__init__.py
+  s_42446818ffee6b::t_c72ef7cc604374 5-8,12-13,15-16
+  s_42446818ffee6b::t_f3768bff57d63d 3,14
+pyproject.toml
+  s_1f00cdba32ca37::t_b368579c9a237f 27
+  s_42446818ffee6b::t_b702c056a5cace 9-10,15
+  s_42446818ffee6b::t_ec36259be6242e 16,23-26,28
+  s_1f00cdba32ca37::t_1a61e067d2cbd6 4
+evaluate_research_quality.py
+  s_42446818ffee6b::t_50e76a43e36a5e 2,4-17,24-33,36-37,39-40,43-53,55-62
+  s_1f00cdba32ca37::t_880618d34bec59 1,3,18-23,34-35,38,41-42,54
+evaluate_escalation_accuracy.py
+  s_42446818ffee6b::t_13fa7709acc978 2,6-19,26-37,40-41,43-44,46-53,55-57,61-69
+  s_1f00cdba32ca37::t_fe40e54a7245ca 1,3-5,20-25,38-39,42,45,54,58-60
+tests/test_demo.py
+  s_1f00cdba32ca37::t_476439a439fd7a 286-315
+  s_42446818ffee6b::t_1ba3cdd2f65c8b 316-318,322,324,327-336,339,341-342,344-361
+  s_42446818ffee6b::t_8f5c308eb0129e 1,11,18-20,77,100-111,176,185,204-208,210-212,214,216-228,230-233,235,237-249,251-254,256-257,259-269,271-283
+  h_e0649daf4c2899 284-285
+judge_prompts/escalation_accuracy.md
+  s_1f00cdba32ca37::t_70ea78d13459a6 29
+docs/align_evaluator_walkthrough.md
+  s_1f00cdba32ca37::t_d6e7bced84e28b 1,3-4,6,8,10-12,14-17,19,21,23-25,27-28,30-31,33,35,37-39,41,43-44,46,50,53-54,56,58-59,61,63-65,67-69,71,73-74
+README.md
+  s_1f00cdba32ca37::t_4c09fb4c5de928 150,152,154,157-158,160
+  h_e0649daf4c2899 13-17,69,72-76,79,81,87,105,120,130,139-144,156
+  s_1f00cdba32ca37::t_48c1c7d544e9be 1,3-5,7-8,10,20-21,23-25,27,31-34,41-42,44-46,48,50,54-56,59,82-83,86,88-93,98,100,104,106,112-114,116,118,121-122,128-129,132,134,136,147-148
+  s_42446818ffee6b::t_15698b4190854c 102,108-109
+  s_1f00cdba32ca37::t_7d0d06dfa6d260 162,164-165
+  s_42446818ffee6b::t_42090c9a5ad83f 124-126
+uv.lock
+  s_42446818ffee6b::t_804f3eb7ceb73e 5-7,11-72,261-367,382-385,394-395,400-937,955-957,987-989,1002-1085,1103-1105,1111-1776
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a193b50fb0e06ac76eade045e3f8c6305a3c24c5",
+  "prompts": {},
+  "humans": {
+    "h_e0649daf4c2899": {
+      "author": "Conrad Corbett <conrad.corbett@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_1f00cdba32ca37": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "028c73c4-01bc-4d78-a890-cfa70ccefa93",
+        "model": "auto-smart"
+      },
+      "human_author": "Conrad Corbett <conrad.corbett@langchain.dev>"
+    },
+    "s_42446818ffee6b": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e45e6673-9a5f-421b-a3ad-bdf5b8c767a6",
+        "model": "default"
+      },
+      "human_author": "Conrad Corbett <conrad.corbett@langchain.dev>"
+    }
+  }
+}
